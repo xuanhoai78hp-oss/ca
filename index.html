@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Đại Dương Cá - Multiplayer Arena</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
+html, body { width:100%; height:100%; overflow:hidden; background:#031b32; font-family:Arial,sans-serif; }
+#game { display:block; width:100%; height:100%; touch-action:none; }
+
+#hud {
+    position:fixed; top:0; left:0; width:100%; padding:10px 15px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    color:#fff; font-size:14px; pointer-events:none; text-shadow:1px 1px 2px #000;
+    z-index:10;
+}
+#hud .level { font-size:16px; font-weight:bold; color:#ffe94d; }
+
+#bigmsg {
+    position:fixed; top:35%; left:50%; transform:translate(-50%,-50%);
+    color:#ffe94d; font-size:22px; font-weight:bold; text-align:center;
+    text-shadow:0 0 10px #000, 0 0 6px #000; pointer-events:none;
+    width:90%; line-height:1.4; z-index:12; white-space:pre-line;
+}
+
+/* CỤM ĐIỀU KHIỂN WASD + TỐC ĐỘ */
+.pad { position:fixed; bottom:18px; z-index:20; }
+#padLeft { left:16px; width:160px; height:160px; }
+
+.btn {
+    position:absolute; display:flex; align-items:center; justify-content:center;
+    border-radius:12px; font-weight:bold; color:#fff; font-size:16px;
+    background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.5);
+    backdrop-filter:blur(2px); touch-action:none; cursor:pointer;
+}
+.btn:active, .btn.active { background:rgba(255,233,77,0.55); border-color:#ffe94d; }
+
+#btnW { top:0; left:55px; width:50px; height:50px; }
+#btnA { top:50px; left:0; width:50px; height:50px; }
+#btnS { top:50px; left:55px; width:50px; height:50px; }
+#btnD { top:50px; left:110px; width:50px; height:50px; }
+#btnSpeedUp   { top:110px; left:0; width:75px; height:45px; font-size:13px; background:rgba(0,255,200,0.2); border-color:#00ffc8; }
+#btnSpeedDown { top:110px; left:85px; width:75px; height:45px; font-size:13px; background:rgba(255,100,100,0.2); border-color:#ff6464; }
+
+#btnSuck {
+    position:fixed; right:16px; bottom:18px; width:110px; height:110px;
+    border-radius:50%; font-size:20px; font-weight:bold; color:#fff;
+    background:rgba(0,220,210,0.32); border:3px solid rgba(0,255,220,0.9);
+    display:flex; align-items:center; justify-content:center;
+    touch-action:none; z-index:20; cursor:pointer; text-shadow:1px 1px 2px #000;
+}
+#btnSuck:active, #btnSuck.active { background:rgba(0,220,210,0.75); }
+
+/* RADAR GÓC TRÊN PHẢI */
+#radar {
+    position: fixed; top: 12px; right: 12px; width: 120px; height: 120px;
+    background: rgba(0, 20, 40, 0.8); border: 2px solid #00ffcc; border-radius: 50%;
+    overflow: hidden; pointer-events: none; z-index: 15; box-shadow: 0 0 10px rgba(0,255,204,0.3);
+}
+
+/* BẢNG XẾP HẠNG ONLINE ĐỘNG NGAY DƯỚI RADAR */
+#leaderboard {
+    position: fixed; top: 140px; right: 12px; width: 175px;
+    background: rgba(0, 20, 40, 0.9); border: 2px solid #00ffcc; border-radius: 8px;
+    padding: 8px; font-size: 11px; color: #fff; z-index: 15; pointer-events: none;
+    box-shadow: 0 0 10px rgba(0,255,204,0.3); text-align: left; max-height: 180px; overflow-y: auto;
+}
+.lb-row { display: flex; justify-content: space-between; margin-bottom: 3px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px; }
+
+/* OVERLAY SẢNH CHỜ */
+#overlay {
+    position:fixed; inset:0; background:rgba(10,25,40,0.96);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; text-align:center; padding:20px; z-index:50; overflow-y:auto;
+}
+#overlay h1 { font-size:24px; color:#ffe94d; margin-bottom:10px; }
+.class-grid { display:flex; gap:12px; margin:12px 0; flex-wrap:wrap; justify-content:center; }
+.class-card {
+    border:2px solid #444; background:#152238; padding:12px; border-radius:10px;
+    cursor:pointer; text-align:center; width:150px; transition:0.2s;
+}
+.class-card.selected { border-color:#00ffcc; background:#1e3557; box-shadow:0 0 12px rgba(0,255,204,0.4); }
+#overlay input { padding:8px; font-size:15px; width:200px; text-align:center; border-radius:8px; border:none; margin:8px 0; }
+
+.mode-buttons { display:flex; gap:15px; margin-top:15px; }
+.mode-btn {
+    padding:12px 24px; font-size:16px; font-weight:bold; border:none; border-radius:10px; cursor:pointer;
+}
+#btnTraining { background:#f39c12; color:#fff; }
+#btnMulti { background:#2ecc71; color:#fff; box-shadow:0 0 10px rgba(46,204,113,0.5); }
+</style>
+<script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<canvas id="radar" width="120" height="120"></canvas>
+
+<!-- BẢNG XẾP HẠNG ĐỘNG ONLINE -->
+<div id="leaderboard">
+    <div style="font-weight:bold; color:#ffe94d; border-bottom:1px solid rgba(255,255,255,0.3); padding-bottom:3px; margin-bottom:5px; text-align:center;">🏆 BẢNG XẾP HẠNG</div>
+    <div id="lbContent">
+        <div class="lb-row"><span>Ghost_99</span><span style="color:#00ffc8;">Lv. 1</span></div>
+    </div>
+</div>
+
+<div id="hud">
+    <div class="left">
+        <div class="level">CẤP ĐỘ: <span id="levelTxt">1</span></div>
+        <div>MỒI: Lv. <span id="preyLevelTxt">0</span> · Cá quái: Lv. <span id="monsterLevelTxt">2</span></div>
+        <div>HÚT NHẦM: <span id="mistakesTxt">0</span>/3</div>
+    </div>
+</div>
+
+<div id="bigmsg"></div>
+
+<div class="pad" id="padLeft">
+    <div class="btn" id="btnW">W</div>
+    <div class="btn" id="btnA">A</div>
+    <div class="btn" id="btnS">S</div>
+    <div class="btn" id="btnD">D</div>
+    <div class="btn" id="btnSpeedUp">➕ TỐC</div>
+    <div class="btn" id="btnSpeedDown">➖ TỐC</div>
+</div>
+
+<div id="btnSuck">🫧 HÚT</div>
+
+<div id="overlay">
+    <h1>🐟 ĐẠI DƯƠNG CÁ</h1>
+    <p style="font-size:13px; color:#aaa;">Chọn màu cá và rủ bạn bè cùng săn mồi dưới biển</p>
+
+    <div class="class-grid">
+        <div class="class-card selected" onclick="selectCountry('VN', '#da251d', '#ffeb00', this)">
+            <h3 style="color:#ffeb00; font-size:14px;">🇻🇳 Việt Nam</h3>
+            <p style="font-size:10px; color:#88a;">Cá đỏ vàng</p>
+        </div>
+        <div class="class-card" onclick="selectCountry('USA', '#3c3b6e', '#b22234', this)">
+            <h3 style="color:#38bdf8; font-size:14px;">🇺🇸 Hợp Chủng Quốc</h3>
+            <p style="font-size:10px; color:#88a;">Cá xanh đỏ</p>
+        </div>
+        <div class="class-card" onclick="selectCountry('JP', '#bc002d', '#ffffff', this)">
+            <h3 style="color:#fff; font-size:14px;">🇯🇵 Nhật Bản</h3>
+            <p style="font-size:10px; color:#88a;">Cá đỏ trắng</p>
+        </div>
+    </div>
+
+    <input type="text" id="playerNameInput" placeholder="Nhập tên của bạn..." value="Ghost_99"><br>
+
+    <div class="mode-buttons">
+        <button class="mode-btn" id="btnTraining" onclick="startGame('training')">🫧 CHƠI ĐƠN</button>
+        <button class="mode-btn" id="btnMulti" onclick="startGame('multi')">🌐 CHƠI CÙNG BẠN</button>
+    </div>
+</div>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const radarCanvas = document.getElementById('radar');
+const radarCtx = radarCanvas.getContext('2d');
+
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let selectedCountry = 'VN';
+let primaryColor = '#da251d';
+let secondaryColor = '#ffeb00';
+let playerName = 'Ghost_99';
+let socket = null;
+let otherPlayers = {};
+
+function selectCountry(code, pColor, sColor, el) {
+    document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedCountry = code;
+    primaryColor = pColor;
+    secondaryColor = sColor;
+}
+
+const WORLD_WIDTH = 3500;
+const WORLD_HEIGHT = 3500;
+const reefs = [
+    { x: 1000, y: 1000, r: 220 },
+    { x: 2600, y: 1000, r: 250 },
+    { x: 1000, y: 2600, r: 200 },
+    { x: 2600, y: 2600, r: 240 }
+];
+const bubbles = [
+    { x: 1800, y: 800, r: 180 },
+    { x: 900, y: 1800, r: 150 },
+    { x: 2500, y: 2000, r: 170 }
+];
+
+let playerFish = null;
+let prey = [];
+let monsters = [];
+let particles = [];
+let killsCount = 0;
+let animationTime = 0;
+
+const state = {
+    running: false,
+    level: 1,
+    preyLevel: 0,
+    monsterMistakes: 0,
+    waveTransition: false
+};
+
+let audioCtx = null;
+function initAudio() {
+    if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playTone(freq, dur, type, vol, endFreq = freq) {
+    if (!audioCtx) return;
+    const oscillator = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const now = audioCtx.currentTime;
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(freq, now);
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), now + dur);
+    gain.gain.setValueAtTime(vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    oscillator.connect(gain);
+    gain.connect(audioCtx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + dur);
+}
+
+function getFishSize(level) {
+    return 26 * Math.pow(1.2, level - 1);
+}
+
+function makePlayerFish() {
+    return {
+        x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2,
+        angle: 0,
+        speed: 0.6,
+        maxSpeed: 1.5,
+        size: getFishSize(state.level),
+        swimPhase: Math.random() * Math.PI * 2,
+        name: playerName,
+        primaryColor: primaryColor,
+        secondaryColor: secondaryColor
+    };
+}
+
+function spawnFish() {
+    prey = [];
+    monsters = [];
+    for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 420 + Math.random() * 1250;
+        prey.push({
+            x: Math.max(50, Math.min(WORLD_WIDTH - 50, playerFish.x + Math.cos(angle) * distance)),
+            y: Math.max(50, Math.min(WORLD_HEIGHT - 50, playerFish.y + Math.sin(angle) * distance)),
+            angle: Math.random() * Math.PI * 2,
+            speed: 0.35 + Math.random() * 0.25,
+            size: getFishSize(state.preyLevel),
+            swimPhase: Math.random() * Math.PI * 2,
+            level: state.preyLevel,
+            color: i % 2 === 0 ? '#f5a04d' : '#ffe27a',
+            cooldown: 0
+        });
+    }
+    for (let i = 0; i < 5; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 750 + Math.random() * 1300;
+        monsters.push({
+            x: Math.max(50, Math.min(WORLD_WIDTH - 50, playerFish.x + Math.cos(angle) * distance)),
+            y: Math.max(50, Math.min(WORLD_HEIGHT - 50, playerFish.y + Math.sin(angle) * distance)),
+            angle: Math.random() * Math.PI * 2,
+            speed: 0.55 + Math.min(state.level, 8) * 0.04,
+            size: getFishSize(state.level + 1),
+            swimPhase: Math.random() * Math.PI * 2,
+            level: state.level + 1,
+            color: '#24b5b5',
+            cooldown: 0
+        });
+    }
+    updateLevelUI();
+}
+
+function updateLevelUI() {
+    if (playerFish) playerFish.size = getFishSize(state.level);
+    for (const monster of monsters) {
+        monster.level = state.level + 1;
+        monster.size = getFishSize(monster.level);
+        monster.speed = 0.55 + Math.min(monster.level, 8) * 0.04;
+    }
+    document.getElementById('levelTxt').textContent = state.level;
+    document.getElementById('preyLevelTxt').textContent = state.preyLevel;
+    document.getElementById('monsterLevelTxt').textContent = state.level + 1;
+    document.getElementById('mistakesTxt').textContent = state.monsterMistakes;
+}
+
+function growAfterFeeding() {
+    if (state.waveTransition || prey.length > 0) return;
+    state.waveTransition = true;
+    state.level++;
+    state.preyLevel++;
+    updateLevelUI();
+    updateLeaderboardUI();
+    playTone(520, 0.35, 'sine', 0.08, 980);
+    showMsg('🐟 ĂN HẾT MỒI! Cá lên cấp ' + state.level + ' — mồi mới cấp ' + state.preyLevel, 2.5);
+    setTimeout(() => {
+        if (!state.running) return;
+        spawnFish();
+        state.waveTransition = false;
+    }, 1400);
+}
+
+function suckCreatures(dt) {
+    if (!isSucking || !playerFish) return;
+    suctionSoundTimer -= dt;
+    if (suctionSoundTimer <= 0) {
+        playTone(360, 0.14, 'sine', 0.025, 220);
+        suctionSoundTimer = 0.38;
+    }
+    const radius = playerFish.size * 20;
+    const mouthX = playerFish.x + Math.cos(playerFish.angle) * playerFish.size;
+    const mouthY = playerFish.y + Math.sin(playerFish.angle) * playerFish.size;
+
+    for (const fish of [...prey, ...monsters]) {
+        const distance = Math.hypot(fish.x - playerFish.x, fish.y - playerFish.y);
+        if (distance > radius) continue;
+
+        const toMouthX = mouthX - fish.x;
+        const toMouthY = mouthY - fish.y;
+        const mouthDistance = Math.hypot(toMouthX, toMouthY);
+        const pullSpeed = 300 + (1 - distance / radius) * 400;
+        if (mouthDistance > 0) {
+            fish.x += (toMouthX / mouthDistance) * pullSpeed * dt;
+            fish.y += (toMouthY / mouthDistance) * pullSpeed * dt;
+            fish.angle = Math.atan2(toMouthY, toMouthX);
+        }
+
+        if (mouthDistance <= playerFish.size * 0.75 && fish.cooldown <= 0) {
+            if (monsters.includes(fish)) {
+                state.monsterMistakes++;
+                fish.cooldown = 1.2;
+                fish.x -= Math.cos(playerFish.angle) * playerFish.size * 3;
+                fish.y -= Math.sin(playerFish.angle) * playerFish.size * 3;
+                burst(fish.x, fish.y, '#c084fc', 10);
+                playTone(260, 0.28, 'sawtooth', 0.08, 100);
+                if (state.monsterMistakes >= 3) {
+                    state.monsterMistakes = 0;
+                    state.level = Math.max(0, state.level - 1);
+                    updateLeaderboardUI();
+                    showMsg('😵 HÚT NHẦM CÁ QUÁI 3 LẦN! Giảm xuống cấp ' + state.level, 2.5);
+                } else {
+                    showMsg('⚠️ HÚT NHẦM CÁ QUÁI! (' + state.monsterMistakes + '/3)', 1.2);
+                }
+                updateLevelUI();
+            } else {
+                prey = prey.filter(item => item !== fish);
+                killsCount++;
+                burst(mouthX, mouthY, '#ffe27a', 8);
+                playTone(720, 0.16, 'sine', 0.06, 420);
+                growAfterFeeding();
+            }
+        }
+    }
+}
+
+let last = 0;
+function loop(ts) {
+    if (!last) last = ts;
+    let dt = (ts - last) / 1000;
+    last = ts;
+    if (dt > 0.05) dt = 0.05;
+
+    animationTime += dt;
+    update(dt);
+    render();
+    drawRadar();
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+function update(dt) {
+    if (!state.running) return;
+    if (playerFish) {
+        if (input.left) playerFish.angle -= 2.3 * dt;
+        if (input.right) playerFish.angle += 2.3 * dt;
+
+        const worldSpeed = 190 * playerFish.speed;
+        playerFish.x = Math.max(50, Math.min(WORLD_WIDTH - 50, playerFish.x + Math.cos(playerFish.angle) * worldSpeed * dt));
+        playerFish.y = Math.max(50, Math.min(WORLD_HEIGHT - 50, playerFish.y + Math.sin(playerFish.angle) * worldSpeed * dt));
+
+        if (socket && socket.connected) {
+            socket.emit('player_move', {
+                x: playerFish.x, y: playerFish.y, angle: playerFish.angle, level: state.level,
+                kills: killsCount, primaryColor: playerFish.primaryColor, secondaryColor: playerFish.secondaryColor
+            });
+        }
+    }
+
+    for (const fish of prey) {
+        fish.cooldown = Math.max(0, fish.cooldown - dt);
+        if (Math.random() < dt * 0.5) fish.angle += (Math.random() - 0.5) * 1.2;
+        fish.x += Math.cos(fish.angle) * fish.speed * 100 * dt;
+        fish.y += Math.sin(fish.angle) * fish.speed * 100 * dt;
+        if (fish.x < 60 || fish.x > WORLD_WIDTH - 60) fish.angle = Math.PI - fish.angle;
+        if (fish.y < 60 || fish.y > WORLD_HEIGHT - 60) fish.angle = -fish.angle;
+    }
+
+    for (const fish of monsters) {
+        fish.cooldown = Math.max(0, fish.cooldown - dt);
+        if (!playerFish) continue;
+        const distance = Math.hypot(playerFish.x - fish.x, playerFish.y - fish.y);
+        if (distance > playerFish.size * 20) fish.angle = Math.atan2(playerFish.y - fish.y, playerFish.x - fish.x);
+        else if (!isSucking && Math.random() < dt * 1.5) fish.angle += (Math.random() - 0.5) * 2.4;
+        fish.x += Math.cos(fish.angle) * fish.speed * 100 * dt;
+        fish.y += Math.sin(fish.angle) * fish.speed * 100 * dt;
+        if (fish.x < 60 || fish.x > WORLD_WIDTH - 60) fish.angle = Math.PI - fish.angle;
+        if (fish.y < 60 || fish.y > WORLD_HEIGHT - 60) fish.angle = -fish.angle;
+    }
+
+    suckCreatures(dt);
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function render() {
+    ctx.clearRect(0, 0, W, H);
+    const ocean = ctx.createLinearGradient(0, 0, 0, H);
+    ocean.addColorStop(0, '#08284b');
+    ocean.addColorStop(1, '#08718b');
+    ctx.fillStyle = ocean;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    if (playerFish) {
+        ctx.translate(W / 2 - playerFish.x, H / 2 - playerFish.y);
+    }
+
+    ctx.strokeStyle = 'rgba(126, 234, 232, 0.18)';
+    ctx.lineWidth = 2;
+    for (let x = 120; x < WORLD_WIDTH; x += 240) {
+        for (let y = 120; y < WORLD_HEIGHT; y += 240) {
+            ctx.beginPath();
+            ctx.arc(x + Math.sin(y) * 35, y + Math.cos(x) * 35, 3 + ((x + y) % 8), 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+
+    for (let reef of reefs) {
+        ctx.fillStyle = '#b95768';
+        ctx.strokeStyle = '#6e3457';
+        ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(reef.x, reef.y, reef.r, Math.PI, 0); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ef9b6b';
+        for (let i = -2; i <= 2; i++) {
+            ctx.beginPath();
+            ctx.arc(reef.x + i * reef.r * 0.28, reef.y - reef.r * 0.55, reef.r * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    for (const bubble of bubbles) {
+        ctx.strokeStyle = 'rgba(105, 226, 238, 0.2)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(bubble.x, bubble.y, bubble.r, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    for (const fish of prey) {
+        drawSeaFish(fish, fish.color, '#fff0bd', fish.size / 26);
+        drawFishLabel(fish, 'Mồi Lv.' + fish.level, '#ffe27a');
+    }
+    for (const fish of monsters) {
+        drawSeaFish(fish, fish.color, '#ff70b5', fish.size / 26);
+        drawFishLabel(fish, 'Cá quái Lv.' + fish.level, '#e8b5ff');
+    }
+    if (playerFish) drawPlayerFish(playerFish);
+
+    for (let id in otherPlayers) {
+        let p = otherPlayers[id];
+        drawOtherFish(p);
+    }
+
+    for (let p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+function drawSeaFish(fish, bodyColor, finColor, scale = 1) {
+    ctx.save();
+    ctx.translate(fish.x, fish.y);
+    const facingLeft = Math.cos(fish.angle) < 0;
+    ctx.rotate(facingLeft ? fish.angle - Math.PI : fish.angle);
+    ctx.scale(facingLeft ? -scale : scale, scale);
+    const s = 26;
+    const swimSpeed = Math.min(1.5, Math.abs(Number(fish.speed) || 0));
+    const swimRate = 4 + swimSpeed * 7;
+    const phase = animationTime * swimRate + (fish.swimPhase || 0);
+    const bodyFlex = 0.07 + swimSpeed * 0.05;
+    const bodyWave = x => Math.sin(phase - x * 0.1) * s * bodyFlex * (1 - Math.max(0, x) / 1.05);
+    const finFlap = Math.sin(phase) * (0.18 + swimSpeed * 0.18);
+    const tailFlap = Math.sin(phase - 0.8) * (0.2 + swimSpeed * 0.2);
+
+    ctx.fillStyle = finColor;
+    ctx.strokeStyle = '#06233b';
+    ctx.lineWidth = 2;
+    ctx.save();
+    ctx.translate(-s * 0.65, 0);
+    ctx.rotate(tailFlap);
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(-s * 0.65, -s * 0.62); ctx.lineTo(-s * 0.53, 0); ctx.lineTo(-s * 0.65, s * 0.62); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(s * 0.12, -s * 0.52);
+    ctx.rotate(finFlap);
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.27, -s * 0.06); ctx.lineTo(s * 0.06, -s * 0.5); ctx.lineTo(s * 0.36, -s * 0.02); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(s * 0.16, s * 0.48);
+    ctx.rotate(-finFlap);
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.21, s * 0.04); ctx.lineTo(s * 0.16, s * 0.44); ctx.lineTo(s * 0.36, -s * 0.06); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = '#06233b';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.95, bodyWave(-0.95));
+    ctx.lineTo(-s * 0.62, -s * 0.5 + bodyWave(-0.62));
+    ctx.lineTo(-s * 0.05, -s * 0.7 + bodyWave(-0.05));
+    ctx.lineTo(s * 0.58, -s * 0.62 + bodyWave(0.58));
+    ctx.lineTo(s * 0.92, -s * 0.3 + bodyWave(0.92));
+    ctx.lineTo(s * 1.05, bodyWave(1.05));
+    ctx.lineTo(s * 0.92, s * 0.3 + bodyWave(0.92));
+    ctx.lineTo(s * 0.58, s * 0.62 + bodyWave(0.58));
+    ctx.lineTo(-s * 0.05, s * 0.7 + bodyWave(-0.05));
+    ctx.lineTo(-s * 0.62, s * 0.5 + bodyWave(-0.62));
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath(); ctx.ellipse(-s * 0.12, -s * 0.25 + bodyWave(-0.12), s * 0.48, s * 0.18, -0.08, 0, Math.PI * 2); ctx.fill();
+
+    for (const side of [-1, 1]) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(s * 0.62, side * s * 0.23, s * 0.17, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#071a2b';
+        ctx.beginPath(); ctx.arc(s * 0.68, side * s * 0.23, s * 0.08, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = '#071a2b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.9, -s * 0.07);
+    ctx.lineTo(s * 1.02, 0);
+    ctx.lineTo(s * 0.9, s * 0.07);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawFishLabel(fish, label, color) {
+    ctx.save();
+    ctx.translate(fish.x, fish.y - (Number(fish.size) || 26) * 1.25 - 10);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(-40, -10, 80, 18);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, 0, 3);
+    ctx.restore();
+}
+
+function drawPlayerFish(fish) {
+    if (isSucking) {
+        ctx.save();
+        ctx.translate(fish.x, fish.y);
+        ctx.rotate(fish.angle);
+        ctx.fillStyle = 'rgba(95, 255, 236, 0.12)';
+        ctx.strokeStyle = 'rgba(95, 255, 236, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, fish.size * 20, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+    }
+    drawSeaFish(fish, fish.primaryColor, fish.secondaryColor, fish.size / 26);
+    drawFishLabel(fish, fish.name + ' (Lv.' + state.level + ')', '#75fff0');
+}
+
+function drawOtherFish(fish) {
+    const primary = fish.primaryColor || '#5689db';
+    const secondary = fish.secondaryColor || '#ff94cf';
+    drawSeaFish(fish, primary, secondary, 1);
+    drawFishLabel(fish, (fish.name || 'Người chơi') + ' (Lv.' + (fish.level || 1) + ')', '#d9f4ff');
+}
+
+function drawRadar() {
+    radarCtx.clearRect(0, 0, 120, 120);
+    if (!playerFish) return;
+
+    let scaleX = 120 / WORLD_WIDTH;
+    let scaleY = 120 / WORLD_HEIGHT;
+
+    radarCtx.fillStyle = '#ffa657';
+    for (let fish of prey) {
+        radarCtx.fillRect(fish.x * scaleX - 2, fish.y * scaleY - 2, 4, 4);
+    }
+    radarCtx.fillStyle = '#d27cff';
+    for (let fish of monsters) {
+        radarCtx.fillRect(fish.x * scaleX - 3, fish.y * scaleY - 3, 6, 6);
+    }
+    for (let id in otherPlayers) {
+        let p = otherPlayers[id];
+        radarCtx.fillStyle = '#3498db';
+        radarCtx.fillRect(p.x * scaleX - 2, p.y * scaleY - 2, 4, 4);
+    }
+    radarCtx.fillStyle = '#75fff0';
+    radarCtx.beginPath(); radarCtx.arc(playerFish.x * scaleX, playerFish.y * scaleY, 4, 0, Math.PI * 2); radarCtx.fill();
+}
+
+// BẢNG XẾP HẠNG ĐỘNG
+function updateLeaderboardUI() {
+    let playersList = [
+        { name: playerName + ' (Bạn)', level: state.level, isPlayer: true }
+    ];
+
+    for (let id in otherPlayers) {
+        let op = otherPlayers[id];
+        playersList.push({ name: op.name || 'Pilots', level: Number(op.level) || 1, isPlayer: false });
+    }
+
+    playersList.sort((a, b) => b.level - a.level);
+
+    const leaderboardContent = document.getElementById('lbContent');
+    leaderboardContent.replaceChildren();
+    playersList.slice(0, 5).forEach((p, index) => {
+        const row = document.createElement('div');
+        row.className = 'lb-row';
+        const name = document.createElement('span');
+        name.textContent = (index === 0 ? '👑 ' : '') + p.name;
+        name.style.color = index === 0 ? '#ffe94d' : '#fff';
+        if (index === 0) name.style.fontWeight = 'bold';
+        const level = document.createElement('span');
+        level.textContent = 'Lv. ' + p.level;
+        level.style.color = p.isPlayer ? '#00ffc8' : '#ff00ff';
+        row.append(name, level);
+        leaderboardContent.append(row);
+    });
+}
+
+function burst(x, y, color, n) {
+    for (let i = 0; i < n; i++) {
+        let a = Math.random() * Math.PI * 2;
+        let sp = 60 + Math.random() * 150;
+        particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, r: 2 + Math.random() * 3, color, life: 0.6 });
+    }
+}
+
+function showMsg(text, sec) {
+    document.getElementById('bigmsg').textContent = text;
+    setTimeout(() => { document.getElementById('bigmsg').textContent = ''; }, sec * 1000);
+}
+
+const input = { left: false, right: false };
+let isSucking = false;
+let suctionSoundTimer = 0;
+
+window.addEventListener('keydown', e => {
+    let k = e.key.toLowerCase();
+    if (k === 'a') input.left = true;
+    if (k === 'd') input.right = true;
+    if (k === 'w' && playerFish) playerFish.speed = Math.min(playerFish.maxSpeed, playerFish.speed + 0.2);
+    if (k === 's' && playerFish) playerFish.speed = Math.max(-0.2, playerFish.speed - 0.2);
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (state.running) isSucking = true;
+    }
+});
+window.addEventListener('keyup', e => {
+    let k = e.key.toLowerCase();
+    if (k === 'a') input.left = false;
+    if (k === 'd') input.right = false;
+    if (e.code === 'Space') isSucking = false;
+});
+
+function bindHold(el, onDown, onUp) {
+    el.addEventListener('touchstart', e => { e.preventDefault(); el.classList.add('active'); onDown(); }, {passive:false});
+    el.addEventListener('touchend', e => { e.preventDefault(); el.classList.remove('active'); if(onUp) onUp(); }, {passive:false});
+    el.addEventListener('touchcancel', e => { e.preventDefault(); el.classList.remove('active'); if(onUp) onUp(); }, {passive:false});
+    el.addEventListener('mousedown', e => { e.preventDefault(); el.classList.add('active'); onDown(); });
+    el.addEventListener('mouseup', e => { e.preventDefault(); el.classList.remove('active'); if(onUp) onUp(); });
+}
+function bindTap(el, fn) {
+    el.addEventListener('touchstart', e => { e.preventDefault(); el.classList.add('active'); fn(); }, {passive:false});
+    el.addEventListener('touchend', e => { e.preventDefault(); el.classList.remove('active'); }, {passive:false});
+    el.addEventListener('mousedown', e => { e.preventDefault(); el.classList.add('active'); fn(); });
+    el.addEventListener('mouseup', e => { e.preventDefault(); el.classList.remove('active'); });
+}
+
+bindHold(document.getElementById('btnA'), () => input.left = true, () => input.left = false);
+bindHold(document.getElementById('btnD'), () => input.right = true, () => input.right = false);
+bindTap(document.getElementById('btnW'), () => { if (playerFish) playerFish.speed = Math.min(playerFish.maxSpeed, playerFish.speed + 0.2); });
+bindTap(document.getElementById('btnS'), () => { if (playerFish) playerFish.speed = Math.max(-0.2, playerFish.speed - 0.2); });
+bindTap(document.getElementById('btnSpeedUp'), () => { if (playerFish) playerFish.speed = Math.min(playerFish.maxSpeed, playerFish.speed + 0.25); });
+bindTap(document.getElementById('btnSpeedDown'), () => { if (playerFish) playerFish.speed = Math.max(-0.2, playerFish.speed - 0.25); });
+
+const suckBtn = document.getElementById('btnSuck');
+bindHold(suckBtn, () => {
+    if (!state.running) return;
+    isSucking = true;
+    suctionSoundTimer = 0;
+}, () => {
+    isSucking = false;
+});
+
+function startGame(mode) {
+    initAudio();
+
+    let rawInput = document.getElementById('playerNameInput').value.trim();
+    if (rawInput !== '') playerName = rawInput;
+
+    state.running = true;
+    state.level = 1;
+    state.preyLevel = 0;
+    state.monsterMistakes = 0;
+    state.waveTransition = false;
+    killsCount = 0;
+    updateLevelUI();
+
+    playerFish = makePlayerFish();
+    prey = [];
+    monsters = [];
+    particles = [];
+    spawnFish();
+
+    if (mode === 'multi') {
+        socket = io();
+        socket.emit('join_game', { name: playerName, country: selectedCountry, primaryColor, secondaryColor });
+        socket.on('update_players', (data) => {
+            let myId = socket.id;
+            otherPlayers = {};
+            for (let id in data) {
+                if (id !== myId) otherPlayers[id] = data[id];
+            }
+            updateLeaderboardUI();
+        });
+        showMsg('🌐 Đã kết nối đại dương cùng bạn bè!', 2.5);
+    } else {
+        if (socket) { socket.disconnect(); socket = null; }
+        otherPlayers = {};
+        updateLeaderboardUI();
+        showMsg('🐟 Bơi đến gần mồi rồi nhấn HÚT (Space) để ăn!', 3);
+    }
+
+    document.getElementById('overlay').style.display = 'none';
+}
+</script>
+</body>
+</html>
