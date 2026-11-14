@@ -22,7 +22,7 @@ const COUNTRY_COLORS = {
 };
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'h.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 app.use(express.static(__dirname));
 
