@@ -54,8 +54,8 @@ html, body { width:100%; height:100%; overflow:hidden; background:#031b32; font-
 
 /* RADAR GÓC TRÊN PHẢI */
 #radar {
-    position: fixed; top: 12px; right: 12px; width: 120px; height: 120px;
-    background: rgba(0, 20, 40, 0.8); border: 2px solid #00ffcc; border-radius: 50%;
+    position: fixed; top: 12px; right: 12px; width: 150px; height: 100px;
+    background: rgba(0, 20, 40, 0.8); border: 2px solid #00ffcc; border-radius: 6px;
     overflow: hidden; pointer-events: none; z-index: 15; box-shadow: 0 0 10px rgba(0,255,204,0.3);
 }
 
@@ -100,7 +100,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:#031b32; font-
 <body>
 
 <canvas id="game"></canvas>
-<canvas id="radar" width="120" height="120"></canvas>
+<canvas id="radar" width="150" height="100"></canvas>
 
 <!-- BẢNG XẾP HẠNG ĐỘNG ONLINE -->
 <div id="leaderboard">
@@ -623,11 +623,11 @@ function drawOtherFish(fish) {
 }
 
 function drawRadar() {
-    radarCtx.clearRect(0, 0, 120, 120);
+    radarCtx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
     if (!playerFish) return;
 
-    let scaleX = 120 / WORLD_WIDTH;
-    let scaleY = 120 / WORLD_HEIGHT;
+    let scaleX = radarCanvas.width / WORLD_WIDTH;
+    let scaleY = radarCanvas.height / WORLD_HEIGHT;
 
     radarCtx.fillStyle = '#ffa657';
     for (let fish of prey) {
